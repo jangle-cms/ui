@@ -7,6 +7,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Html
 import Html.Attributes
 import Process
 import Task exposing (Task)
@@ -41,6 +42,17 @@ fonts =
             , name = "Nunito"
             }
     }
+
+
+icons =
+    { menu = icon "menu"
+    , user = icon "person"
+    }
+
+
+icon : String -> Element msg
+icon name =
+    html (Html.span [ Html.Attributes.class ("icon ion-md-" ++ name) ] [])
 
 
 setAlpha : Float -> Element.Color -> Element.Color
@@ -79,7 +91,7 @@ classes =
         ]
     , button =
         [ paddingXY 24 8
-        , Border.rounded 6
+        , Border.rounded 4
         , Border.shadow shadows.card
         , Background.color colors.coral
         , Font.color colors.white
@@ -208,7 +220,7 @@ viewPage page =
             text "Not found"
 
         Dashboard ->
-            text "Dashboard"
+            dashboardPage
 
 
 signInPage : Element Msg
@@ -248,10 +260,76 @@ signInForm =
                 , label = Input.labelAbove [ Font.bold ] (text "Password")
                 }
             , Input.button (classes.button ++ [ alignRight ])
-                { onPress = Just NoOp
+                { onPress = Just (NavigateTo Dashboard)
                 , label = text "Sign in"
                 }
             ]
+        ]
+
+
+dashboardPage : Element Msg
+dashboardPage =
+    column
+        [ width fill, height fill ]
+        [ navbar
+        , column
+            [ padding 16
+            , spacing 16
+            , width (fill |> maximum 720)
+            , centerX
+            ]
+            (List.map (always cardExample) (List.range 1 5))
+        ]
+
+
+navbar : Element Msg
+navbar =
+    el
+        [ paddingXY 0 16
+        , width fill
+        , Background.color colors.white
+        , Border.shadow shadows.card
+        , Font.size 24
+        ]
+    <|
+        row
+            [ paddingXY 16 0
+            , width (fill |> maximum 720)
+            , centerX
+            ]
+            [ el [ alignLeft, paddingEach { top = 8, left = 8, right = 8, bottom = 4 } ] icons.menu
+            , el
+                [ centerX
+                , Font.family [ fonts.heading ]
+                , Font.size 32
+                ]
+                (text "Jangle")
+            , Input.button [ alignRight, paddingXY 8 4 ]
+                { onPress = Just (NavigateTo SignIn)
+                , label = icons.user
+                }
+            ]
+
+
+cardExample : Element Msg
+cardExample =
+    column
+        [ width fill
+        , padding 16
+        , spacing 4
+        , Background.color colors.white
+        , Border.solid
+        , Border.width 1
+        , Border.color colors.grays.light
+        , Border.shadow shadows.card
+        , Font.color colors.grays.dark
+        ]
+        [ el
+            [ Font.size 24
+            , Font.bold
+            ]
+            (text "Authors")
+        , el [ Font.size 14, alpha 0.5 ] (text "123 items")
         ]
 
 
@@ -323,7 +401,7 @@ fadeOut pageStatus =
             Leaving page
 
         Showing page ->
-            Showing page
+            Leaving page
 
 
 urlOf : Page -> Url -> Url
