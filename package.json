@@ -1,0 +1,33 @@
+{
+  "name": "@jangle/ui",
+  "version": "1.0.0",
+  "description": "The frontend for Jangle CMS.",
+  "main": "index.html",
+  "scripts": {
+    "build": "elm make src/Main.elm --debug --output public/app.js",
+    "build:release": "elm make src/Main.elm --optimize --output public/app.js",
+    "build:watch": "npm run build & chokidar './src' -c 'npm run build'",
+    "serve": "serve public",
+    "dev": "npm run build:watch & npm run serve"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jangle-cms/ui.git"
+  },
+  "keywords": [
+    "elm",
+    "cms",
+    "jangle"
+  ],
+  "author": "Ryan Haskell-Glatz",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jangle-cms/ui/issues"
+  },
+  "homepage": "https://github.com/jangle-cms/ui#readme",
+  "devDependencies": {
+    "chokidar-cli": "^1.2.1",
+    "elm": "^0.19.0-bugfix2",
+    "serve": "^10.0.2"
+  }
+}
