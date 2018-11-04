@@ -60,13 +60,16 @@ setAlpha alpha =
     toRgb >> (\color -> { color | alpha = alpha }) >> fromRgb
 
 
+shadowWithOffset offset =
+    { offset = offset
+    , size = 0
+    , blur = 8
+    , color = setAlpha 0.125 colors.grays.dark
+    }
+
+
 shadows =
-    { card =
-        { offset = ( 0, 4 )
-        , size = 0
-        , blur = 8
-        , color = setAlpha 0.125 colors.grays.dark
-        }
+    { card = shadowWithOffset ( 0, 4 )
     }
 
 
@@ -79,7 +82,7 @@ classes =
         ]
     , card =
         [ width fill
-        , paddingXY 24 36
+        , paddingEach { top = 36, left = 24, right = 24, bottom = 24 }
         , spacing 48
         , Background.color colors.white
         , Border.rounded 6
@@ -90,7 +93,7 @@ classes =
         , Font.color colors.grays.dark
         ]
     , button =
-        [ paddingXY 24 8
+        [ paddingXY 24 12
         , Border.rounded 4
         , Border.shadow shadows.card
         , Background.color colors.coral
@@ -102,10 +105,27 @@ classes =
     }
 
 
-fade : Float -> Attribute msg
-fade ms =
-    htmlAttribute
-        (Html.Attributes.style "transition" <| "opacity " ++ String.fromFloat ms ++ "ms ease-in-out")
+type TransitionableProp
+    = Transform
+    | Opacity
+
+
+nameOfProp : TransitionableProp -> String
+nameOfProp prop =
+    case prop of
+        Transform ->
+            "transform"
+
+        Opacity ->
+            "opacity"
+
+
+transition : TransitionableProp -> Float -> Attribute msg
+transition prop ms =
+    [ nameOfProp prop, String.fromFloat ms ++ "ms", "ease-in-out" ]
+        |> String.join " "
+        |> Html.Attributes.style "transition"
+        |> htmlAttribute
 
 
 
@@ -155,7 +175,7 @@ type Page
 init : Flags -> Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
     ( Model url key Loading
-    , delay 300 (NavigateTo Dashboard)
+    , delay 300 (NavigateTo SignIn)
     )
 
 
@@ -183,10 +203,49 @@ view model =
             , Font.family [ fonts.body ]
             , height fill
             , Background.color colors.grays.lighter
+            , inFront (navbar (isNavVisible model.page))
+            , inFront (footer (isNavVisible model.page))
+            , clipY
             ]
             (viewLayout model)
         ]
     }
+
+
+isNavVisible : PageStatus -> Bool
+isNavVisible =
+    pageFromStatus
+        >> Maybe.map shouldShowNavigation
+        >> Maybe.withDefault False
+
+
+pageFromStatus : PageStatus -> Maybe Page
+pageFromStatus pageStatus =
+    case pageStatus of
+        Loading ->
+            Nothing
+
+        Leaving page ->
+            Just page
+
+        Showing page ->
+            Just page
+
+
+shouldShowNavigation : Page -> Bool
+shouldShowNavigation page =
+    case page of
+        SignIn ->
+            False
+
+        SignUp ->
+            False
+
+        NotFound ->
+            False
+
+        Dashboard ->
+            True
 
 
 title : Model -> String
@@ -198,13 +257,13 @@ viewLayout : Model -> Element Msg
 viewLayout model =
     case model.page of
         Loading ->
-            el [ width fill, height fill, fade 300, alpha 0 ] (text "")
+            el [ width fill, height fill, transition Opacity 300, alpha 0 ] (text "")
 
         Leaving page ->
-            el [ width fill, height fill, fade 300, alpha 0 ] (viewPage page)
+            el [ width fill, height fill, transition Opacity 300, alpha 0 ] (viewPage page)
 
         Showing page ->
-            el [ width fill, height fill, fade 300, alpha 1 ] (viewPage page)
+            el [ width fill, height fill, transition Opacity 300, alpha 1 ] (viewPage page)
 
 
 viewPage : Page -> Element Msg
@@ -220,7 +279,12 @@ viewPage page =
             text "Not found"
 
         Dashboard ->
-            dashboardPage
+            pageWithNavigation dashboardPage
+
+
+pageWithNavigation : Element msg -> Element msg
+pageWithNavigation =
+    el [ scrollbarY, paddingXY 0 64, width fill, height fill, Background.color colors.grays.lighter ]
 
 
 signInPage : Element Msg
@@ -270,26 +334,30 @@ signInForm =
 dashboardPage : Element Msg
 dashboardPage =
     column
-        [ width fill, height fill ]
-        [ navbar
-        , column
-            [ padding 16
-            , spacing 16
-            , width (fill |> maximum 720)
-            , centerX
-            ]
-            (List.map (always cardExample) (List.range 1 5))
+        [ width fill
+        , height fill
+        , spacing 12
+        , paddingXY 8 12
         ]
+        (List.map (always cardExample) (List.range 1 10))
 
 
-navbar : Element Msg
-navbar =
+navbar : Bool -> Element Msg
+navbar isVisible =
     el
         [ paddingXY 0 16
         , width fill
         , Background.color colors.white
         , Border.shadow shadows.card
-        , Font.size 24
+        , Font.size 16
+        , moveUp
+            (if isVisible then
+                0
+
+             else
+                64
+            )
+        , transition Transform 300
         ]
     <|
         row
@@ -297,18 +365,48 @@ navbar =
             , width (fill |> maximum 720)
             , centerX
             ]
-            [ el [ alignLeft, paddingEach { top = 8, left = 8, right = 8, bottom = 4 } ] icons.menu
-            , el
+            [ el
                 [ centerX
                 , Font.family [ fonts.heading ]
-                , Font.size 32
+                , Font.size 30
                 ]
                 (text "Jangle")
-            , Input.button [ alignRight, paddingXY 8 4 ]
-                { onPress = Just (NavigateTo SignIn)
-                , label = icons.user
-                }
             ]
+
+
+footer : Bool -> Element Msg
+footer isVisible =
+    el
+        [ alignBottom
+        , width fill
+        , Background.color colors.white
+        , Border.shadow (shadowWithOffset ( 0, -4 ))
+        , Font.size 16
+        , moveDown
+            (if isVisible then
+                0
+
+             else
+                42 + 24
+            )
+        , transition Transform 300
+        ]
+    <|
+        row
+            [ paddingXY 16 0
+            , width (fill |> maximum 720)
+            , centerX
+            ]
+            [ button "Create"
+            ]
+
+
+button : String -> Element Msg
+button label =
+    Input.button (classes.button ++ [ centerX, moveUp 20 ])
+        { onPress = Just (NavigateTo SignIn)
+        , label = text label
+        }
 
 
 cardExample : Element Msg
@@ -319,7 +417,6 @@ cardExample =
         , spacing 4
         , Background.color colors.white
         , Border.solid
-        , Border.width 1
         , Border.color colors.grays.light
         , Border.shadow shadows.card
         , Font.color colors.grays.dark
