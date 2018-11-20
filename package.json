@@ -4,7 +4,7 @@
   "description": "The frontend for Jangle CMS.",
   "main": "index.html",
   "scripts": {
-    "build": "elm make src/Main.elm --output public/app.js",
+    "build": "elm make src/Main.elm --output public/app.js || true",
     "build:release": "elm make src/Main.elm --optimize --output public/app.js",
     "build:watch": "npm run build & chokidar './src' -c 'npm run build'",
     "serve": "serve public",

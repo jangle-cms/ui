@@ -1,18 +1,20 @@
 module Main exposing (main)
 
 import Browser exposing (Document, UrlRequest(..))
+import Browser.Events as Events
 import Browser.Navigation as Nav
 import Element exposing (..)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Element.Lazy as Lazy
 import Html
 import Html.Attributes
 import Process
 import Task exposing (Task)
 import Url exposing (Url)
-import Url.Parser as Parser exposing (Parser, map, oneOf, s, top)
+import Url.Parser as Parser exposing ((</>), Parser, map, oneOf, s, top)
 
 
 
@@ -20,8 +22,10 @@ import Url.Parser as Parser exposing (Parser, map, oneOf, s, top)
 
 
 colors =
-    { white = rgb255 255 255 255
+    { transparent = rgba 0 0 0 0
+    , white = rgb255 255 255 255
     , coral = rgb255 255 100 80
+    , lightCoral = rgba255 255 100 80 0.15
     , grays =
         { lighter = rgb255 240 240 240
         , light = rgb255 200 200 200
@@ -47,12 +51,17 @@ fonts =
 icons =
     { menu = icon "menu"
     , user = icon "person"
+    , search = icon "search"
+    , signout = icon "log-out"
+    , list = icon "list"
+    , users = icon "people"
+    , media = icon "images"
     }
 
 
 icon : String -> Element msg
 icon name =
-    html (Html.span [ Html.Attributes.class ("icon ion-md-" ++ name) ] [])
+    html (Html.span [ Html.Attributes.class ("icon ion-ios-" ++ name) ] [])
 
 
 setAlpha : Float -> Element.Color -> Element.Color
@@ -79,6 +88,7 @@ classes =
         , paddingXY 0 2
         , Border.widthEach { top = 0, left = 0, right = 0, bottom = 1 }
         , Border.color colors.grays.light
+        , Background.color colors.transparent
         ]
     , card =
         [ width fill
@@ -100,6 +110,16 @@ classes =
         , Font.color colors.white
         , Font.bold
         , Font.size 18
+        , mouseOver [ alpha 0.8 ]
+        ]
+    , tinyButton =
+        [ paddingXY 20 10
+        , Border.rounded 4
+        , Border.shadow shadows.card
+        , Background.color colors.coral
+        , Font.color colors.white
+        , Font.bold
+        , Font.size 14
         , mouseOver [ alpha 0.8 ]
         ]
     }
@@ -133,7 +153,11 @@ transition prop ms =
 
 
 type alias Flags =
-    ()
+    { windowSize :
+        { width : Int
+        , height : Int
+        }
+    }
 
 
 main : Program Flags Model Msg
@@ -155,7 +179,9 @@ main =
 type alias Model =
     { url : Url
     , key : Nav.Key
+    , device : Device
     , page : PageStatus
+    , isSidenavRevealed : Bool
     }
 
 
@@ -169,12 +195,17 @@ type Page
     = SignIn
     | SignUp
     | Dashboard
+    | Item
     | NotFound
 
 
 init : Flags -> Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
-    ( Model url key Loading
+    ( Model url
+        key
+        (classifyDevice flags.windowSize)
+        Loading
+        False
     , delay 300 (NavigateTo SignIn)
     )
 
@@ -199,14 +230,22 @@ view model =
     { title = title model
     , body =
         [ Element.layout
-            [ Font.size 16
-            , Font.family [ fonts.body ]
-            , height fill
-            , Background.color colors.grays.lighter
-            , inFront (navbar (isNavVisible model.page))
-            , inFront (footer (isNavVisible model.page))
-            , clipY
-            ]
+            ([ Font.size 16
+             , Font.family [ fonts.body ]
+             , height fill
+             , Background.color colors.grays.lighter
+             ]
+                ++ (if model.device.class == Phone then
+                        [ inFront (navbar (isNavVisible model.page))
+                        , inFront (footer model.device (isNavVisible model.page))
+                        ]
+
+                    else
+                        [ inFront (footer model.device (isNavVisible model.page)), inFront (sidenav (isNavVisible model.page)) ]
+                   )
+                ++ [ clipY
+                   ]
+            )
             (viewLayout model)
         ]
     }
@@ -247,6 +286,9 @@ shouldShowNavigation page =
         Dashboard ->
             True
 
+        Item ->
+            True
+
 
 title : Model -> String
 title model =
@@ -260,14 +302,14 @@ viewLayout model =
             el [ width fill, height fill, transition Opacity 300, alpha 0 ] (text "")
 
         Leaving page ->
-            el [ width fill, height fill, transition Opacity 300, alpha 0 ] (viewPage page)
+            el [ width fill, height fill, transition Opacity 300, alpha 0 ] (viewPage model.device page)
 
         Showing page ->
-            el [ width fill, height fill, transition Opacity 300, alpha 1 ] (viewPage page)
+            el [ width fill, height fill, transition Opacity 300, alpha 1 ] (viewPage model.device page)
 
 
-viewPage : Page -> Element Msg
-viewPage page =
+viewPage : Device -> Page -> Element Msg
+viewPage device page =
     case page of
         SignIn ->
             signInPage
@@ -278,13 +320,37 @@ viewPage page =
         NotFound ->
             text "Not found"
 
+        Item ->
+            pageWithNavigation device itemPage
+
         Dashboard ->
-            pageWithNavigation dashboardPage
+            pageWithNavigation device dashboardPage
 
 
-pageWithNavigation : Element msg -> Element msg
-pageWithNavigation =
-    el [ scrollbarY, paddingXY 0 64, width fill, height fill, Background.color colors.grays.lighter ]
+pageWithNavigation : Device -> Element msg -> Element msg
+pageWithNavigation device =
+    if device.class == Phone then
+        el
+            [ scrollbarY
+            , paddingEach { top = 64, left = 0, right = 0, bottom = 72 }
+            , width fill
+            , height fill
+            , Background.color colors.grays.lighter
+            ]
+
+    else
+        el
+            [ scrollbarY
+            , paddingEach
+                { top = 0
+                , left = 240
+                , right = 0
+                , bottom = 72
+                }
+            , width fill
+            , height fill
+            , Background.color colors.grays.lighter
+            ]
 
 
 signInPage : Element Msg
@@ -336,10 +402,235 @@ dashboardPage =
     column
         [ width fill
         , height fill
-        , spacing 12
-        , paddingXY 8 12
+        , spacing 0
         ]
-        (List.map (always cardExample) (List.range 1 10))
+        [ hero "Dashboard" "Welcome back, Ryan."
+        , column
+            [ width (fill |> maximum 640)
+            , centerX
+            , paddingXY 16 0
+            ]
+            [ el [ width fill, moveUp 30 ] searchbar
+            , column
+                [ width fill
+                , height fill
+                , spacing 12
+                ]
+                (List.map cardExample
+                    [ ( "People", "10 people" )
+                    , ( "Blog Posts", "52 posts" )
+                    , ( "Offices", "4 locations" )
+                    ]
+                )
+            ]
+        ]
+
+
+type Field
+    = SingleLine
+    | Html
+    | Email
+    | Relationship
+    | Group NestedFields
+    | Repeater NestedFields
+
+
+type NestedFields
+    = NestedFields Form
+
+
+type alias Form =
+    List ( String, Field )
+
+
+form : List ( String, Field )
+form =
+    [ ( "Name"
+      , Group
+            (NestedFields
+                [ ( "First Name", SingleLine )
+                , ( "Middle Name", SingleLine )
+                , ( "Last Name", SingleLine )
+                ]
+            )
+      )
+    , ( "Contact Information"
+      , Group
+            (NestedFields
+                [ ( "Office", Relationship )
+                , ( "Phone", SingleLine )
+                , ( "Email", Email )
+                ]
+            )
+      )
+    , ( "Sections"
+      , Repeater (NestedFields [ ( "Section", Html ) ])
+      )
+    ]
+
+
+itemForm : Form -> Element Msg
+itemForm form_ =
+    column
+        [ paddingXY 16 32
+        , spacing 32
+        , Font.size 18
+        , width (fill |> maximum 640)
+        , centerX
+        ]
+        (List.map viewField form)
+
+
+viewField : ( String, Field ) -> Element Msg
+viewField ( label, field ) =
+    case field of
+        SingleLine ->
+            textField label
+
+        Email ->
+            Input.email classes.input
+                { onChange = always NoOp
+                , text = ""
+                , placeholder = Nothing
+                , label = Input.labelAbove [ Font.bold ] (text label)
+                }
+
+        Html ->
+            Input.multiline []
+                { onChange = always NoOp
+                , text = ""
+                , placeholder = Nothing
+                , label = Input.labelAbove [ Font.bold ] (text label)
+                , spellcheck = False
+                }
+
+        Relationship ->
+            Input.search classes.input
+                { onChange = always NoOp
+                , text = ""
+                , placeholder = Nothing
+                , label = Input.labelAbove [ Font.bold ] (text label)
+                }
+
+        Group (NestedFields fields) ->
+            column [ spacing 24, width fill ] <|
+                [ el [ Font.size 28, Font.bold ] (text label)
+                , column [ spacing 16, width fill ]
+                    (List.map (Lazy.lazy viewField) fields)
+                ]
+
+        Repeater (NestedFields fields) ->
+            column [ spacing 24, width fill ] <|
+                [ el [ Font.size 28, Font.bold ] (text label)
+                , column [ spacing 16, width fill ]
+                    (List.map (Lazy.lazy viewField) fields)
+                , Input.button (classes.tinyButton ++ [ alignRight ]) { label = text "Add row", onPress = Nothing }
+                ]
+
+
+textField label =
+    Input.text
+        classes.input
+        { onChange = always NoOp
+        , text = ""
+        , placeholder = Nothing
+        , label = Input.labelAbove [ Font.bold ] (text label)
+        }
+
+
+itemPage : Element Msg
+itemPage =
+    column
+        [ width fill
+        , height fill
+        ]
+        [ hero "New Person" "Created by Ryan."
+        , itemForm form
+        ]
+
+
+hero : String -> String -> Element Msg
+hero title_ caption =
+    column
+        [ Background.color colors.coral
+        , Font.color colors.white
+        , paddingXY 16 64
+        , width fill
+        , spacing 12
+        ]
+        [ el
+            [ width fill
+            , Font.center
+            , Font.size 36
+            , Font.bold
+            ]
+            (text title_)
+        , el
+            [ width fill
+            , Font.center
+            ]
+            (text caption)
+        ]
+
+
+searchbar : Element Msg
+searchbar =
+    row
+        [ width fill
+        , Background.color colors.white
+        , padding 12
+        , Border.shadow shadows.card
+        , spacing 8
+        ]
+        [ Input.search
+            [ paddingXY 2 4
+            , Border.width 0
+            ]
+            { label = Input.labelHidden "Search"
+            , text = ""
+            , onChange = always NoOp
+            , placeholder = Just (Input.placeholder [ moveDown 4 ] (text "Search"))
+            }
+        , el [ alignRight, Font.size 24, padding 4 ] icons.search
+        ]
+
+
+sidenav : Bool -> Element Msg
+sidenav isVisible =
+    column
+        [ width (px 240)
+        , height fill
+        , Background.color colors.white
+        , Border.shadow shadows.card
+        , moveLeft
+            (if isVisible then
+                0
+
+             else
+                240
+            )
+        , transition Transform 300
+        ]
+        [ Input.button [ width fill, paddingXY 16 24 ] { label = el [ centerX ] logo, onPress = Just (NavigateTo Dashboard) }
+        , el [ height (fillPortion 1) ] (text "")
+        , column [ width fill ]
+            [ el [ width fill, Font.size 20, Font.bold, Font.color colors.coral, Background.color colors.lightCoral ] <|
+                el [ spacing 8, width fill, paddingXY 16 12, Font.center ] (text "Content")
+            , el [ width fill, Font.size 20, Font.bold, Font.color colors.grays.dark, Background.color colors.white ] <|
+                el [ spacing 8, width fill, paddingXY 16 12, Font.center ] (text "Media")
+            , el [ width fill, Font.size 20, Font.bold, Font.color colors.grays.dark, Background.color colors.white ] <|
+                el [ spacing 8, width fill, paddingXY 16 12, Font.center ] (text "Users")
+            ]
+        , el [ height (fillPortion 2) ] (text "")
+        , Input.button [ width fill, paddingXY 16 24 ]
+            { label =
+                row [ spacing 6, centerX ]
+                    [ el [] icons.signout
+                    , text "Sign out"
+                    ]
+            , onPress = Just (NavigateTo SignIn)
+            }
+        ]
 
 
 navbar : Bool -> Element Msg
@@ -365,23 +656,41 @@ navbar isVisible =
             , width (fill |> maximum 720)
             , centerX
             ]
-            [ el
-                [ centerX
-                , Font.family [ fonts.heading ]
-                , Font.size 30
-                ]
-                (text "Jangle")
+            [ Input.button [ Font.size 24, alignLeft ] { label = icons.menu, onPress = Just RevealSidenav }
+            , Input.button [ centerX ] { label = logo, onPress = Just (NavigateTo Dashboard) }
+            , Input.button [ Font.size 24, alignRight ] { label = icons.signout, onPress = Just (NavigateTo SignIn) }
             ]
 
 
-footer : Bool -> Element Msg
-footer isVisible =
+logo : Element Msg
+logo =
+    el
+        [ centerX
+        , Font.family [ fonts.heading ]
+        , Font.size 30
+        ]
+        (text "Jangle")
+
+
+footer : Device -> Bool -> Element Msg
+footer device isVisible =
     el
         [ alignBottom
         , width fill
         , Background.color colors.white
         , Border.shadow (shadowWithOffset ( 0, -4 ))
         , Font.size 16
+        , paddingEach
+            { top = 0
+            , left =
+                if device.class /= Phone then
+                    240
+
+                else
+                    0
+            , right = 0
+            , bottom = 0
+            }
         , moveDown
             (if isVisible then
                 0
@@ -397,20 +706,20 @@ footer isVisible =
             , width (fill |> maximum 720)
             , centerX
             ]
-            [ button "Create"
+            [ button Item "Create"
             ]
 
 
-button : String -> Element Msg
-button label =
+button : Page -> String -> Element Msg
+button page label =
     Input.button (classes.button ++ [ centerX, moveUp 20 ])
-        { onPress = Just (NavigateTo SignIn)
+        { onPress = Just (NavigateTo page)
         , label = text label
         }
 
 
-cardExample : Element Msg
-cardExample =
+cardExample : ( String, String ) -> Element Msg
+cardExample ( label, caption ) =
     column
         [ width fill
         , padding 16
@@ -425,8 +734,8 @@ cardExample =
             [ Font.size 24
             , Font.bold
             ]
-            (text "Authors")
-        , el [ Font.size 14, alpha 0.5 ] (text "123 items")
+            (text label)
+        , el [ Font.size 14, alpha 0.5 ] (text caption)
         ]
 
 
@@ -440,6 +749,9 @@ type Msg
     | NavigateTo Page
     | FadeIn Page
     | ShowPage Page
+    | WindowResize Int Int
+    | RevealSidenav
+    | HideSidenav
     | NoOp
 
 
@@ -448,6 +760,21 @@ update msg model =
     case msg of
         NoOp ->
             ( model
+            , Cmd.none
+            )
+
+        RevealSidenav ->
+            ( { model | isSidenavRevealed = True }
+            , Cmd.none
+            )
+
+        HideSidenav ->
+            ( { model | isSidenavRevealed = False }
+            , Cmd.none
+            )
+
+        WindowResize width height ->
+            ( { model | device = classifyDevice { width = width, height = height } }
             , Cmd.none
             )
 
@@ -513,6 +840,9 @@ pathOf page =
                 Dashboard ->
                     ""
 
+                Item ->
+                    "lists/people/new"
+
                 SignIn ->
                     "sign-in"
 
@@ -540,6 +870,7 @@ route =
         [ map Dashboard top
         , map SignIn (s "sign-in")
         , map SignUp (s "sign-up")
+        , map Item (s "lists" </> s "people" </> s "new")
         ]
 
 
@@ -549,4 +880,4 @@ route =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Sub.none
+    Events.onResize WindowResize
