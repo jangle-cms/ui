@@ -56,12 +56,13 @@ icons =
     , list = icon "list"
     , users = icon "people"
     , media = icon "images"
+    , reorder = icon "reorder"
     }
 
 
 icon : String -> Element msg
 icon name =
-    html (Html.span [ Html.Attributes.class ("icon ion-ios-" ++ name) ] [])
+    html (Html.span [ Html.Attributes.class ("icon ion-md-" ++ name) ] [])
 
 
 setAlpha : Float -> Element.Color -> Element.Color
@@ -85,10 +86,11 @@ shadows =
 classes =
     { input =
         [ width fill
-        , paddingXY 0 2
-        , Border.widthEach { top = 0, left = 0, right = 0, bottom = 1 }
+        , paddingXY 4 4
+        , Border.width 1
+        , spacing 8
         , Border.color colors.grays.light
-        , Background.color colors.transparent
+        , Background.color colors.white
         ]
     , card =
         [ width fill
@@ -111,6 +113,7 @@ classes =
         , Font.bold
         , Font.size 18
         , mouseOver [ alpha 0.8 ]
+        , transition Opacity 200
         ]
     , tinyButton =
         [ paddingXY 20 10
@@ -121,6 +124,7 @@ classes =
         , Font.bold
         , Font.size 14
         , mouseOver [ alpha 0.8 ]
+        , transition Opacity 200
         ]
     }
 
@@ -128,6 +132,8 @@ classes =
 type TransitionableProp
     = Transform
     | Opacity
+    | FontColor
+    | BackgroundColor
 
 
 nameOfProp : TransitionableProp -> String
@@ -139,11 +145,28 @@ nameOfProp prop =
         Opacity ->
             "opacity"
 
+        FontColor ->
+            "color"
+
+        BackgroundColor ->
+            "background-color"
+
 
 transition : TransitionableProp -> Float -> Attribute msg
 transition prop ms =
     [ nameOfProp prop, String.fromFloat ms ++ "ms", "ease-in-out" ]
         |> String.join " "
+        |> Html.Attributes.style "transition"
+        |> htmlAttribute
+
+
+transitions : List TransitionableProp -> Float -> Attribute msg
+transitions props ms =
+    props
+        |> List.map nameOfProp
+        |> List.map (\prop -> [ prop, String.fromFloat ms ++ "ms", "ease-in-out" ])
+        |> List.map (String.join " ")
+        |> String.join ", "
         |> Html.Attributes.style "transition"
         |> htmlAttribute
 
@@ -404,7 +427,7 @@ dashboardPage =
         , height fill
         , spacing 0
         ]
-        [ hero "Dashboard" "Welcome back, Ryan."
+        [ hero "Dashboard" "Welcome back."
         , column
             [ width (fill |> maximum 640)
             , centerX
@@ -446,25 +469,30 @@ type alias Form =
 form : List ( String, Field )
 form =
     [ ( "Name"
-      , Group
-            (NestedFields
+      , Group <|
+            NestedFields
                 [ ( "First Name", SingleLine )
                 , ( "Middle Name", SingleLine )
                 , ( "Last Name", SingleLine )
                 ]
-            )
       )
     , ( "Contact Information"
-      , Group
-            (NestedFields
+      , Group <|
+            NestedFields
                 [ ( "Office", Relationship )
                 , ( "Phone", SingleLine )
                 , ( "Email", Email )
                 ]
-            )
+      )
+    , ( "Bio"
+      , Group <|
+            NestedFields
+                [ ( "Main Bio", Html )
+                , ( "Additional Bio", Html )
+                ]
       )
     , ( "Sections"
-      , Repeater (NestedFields [ ( "Section", Html ) ])
+      , Repeater <| NestedFields [ ( "Section", Html ) ]
       )
     ]
 
@@ -472,7 +500,7 @@ form =
 itemForm : Form -> Element Msg
 itemForm form_ =
     column
-        [ paddingXY 16 32
+        [ paddingXY 48 32
         , spacing 32
         , Font.size 18
         , width (fill |> maximum 640)
@@ -496,7 +524,7 @@ viewField ( label, field ) =
                 }
 
         Html ->
-            Input.multiline []
+            Input.multiline (classes.input ++ [ height (px 180) ])
                 { onChange = always NoOp
                 , text = ""
                 , placeholder = Nothing
@@ -513,19 +541,55 @@ viewField ( label, field ) =
                 }
 
         Group (NestedFields fields) ->
-            column [ spacing 24, width fill ] <|
-                [ el [ Font.size 28, Font.bold ] (text label)
-                , column [ spacing 16, width fill ]
-                    (List.map (Lazy.lazy viewField) fields)
-                ]
+            viewGroupFields label fields
 
         Repeater (NestedFields fields) ->
             column [ spacing 24, width fill ] <|
                 [ el [ Font.size 28, Font.bold ] (text label)
                 , column [ spacing 16, width fill ]
-                    (List.map (Lazy.lazy viewField) fields)
-                , Input.button (classes.tinyButton ++ [ alignRight ]) { label = text "Add row", onPress = Nothing }
+                    (List.map
+                        (\field_ ->
+                            el
+                                [ width fill
+                                , spacing 12
+                                , onLeft
+                                    (el
+                                        [ height fill
+                                        , paddingEach { top = 0, left = 0, right = 8, bottom = 0 }
+                                        ]
+                                        (Input.button
+                                            [ Font.size 24
+                                            , Font.color colors.grays.light
+                                            , mouseOver
+                                                [ Background.color colors.lightCoral
+                                                , Font.color colors.coral
+                                                ]
+                                            , transitions [ FontColor, BackgroundColor ] 300
+                                            , height fill
+                                            , paddingXY 8 0
+                                            ]
+                                            { label = el [ centerY ] icons.reorder
+                                            , onPress = Nothing
+                                            }
+                                        )
+                                    )
+                                ]
+                                (Lazy.lazy viewField field_)
+                        )
+                        fields
+                    )
+                , Input.button (classes.tinyButton ++ [ alignRight ])
+                    { label = text "Add row", onPress = Nothing }
                 ]
+
+
+viewGroupFields : String -> Form -> Element Msg
+viewGroupFields label fields =
+    column [ spacing 24, width fill ] <|
+        [ el [ Font.size 28, Font.bold ] (text label)
+        , column [ spacing 16, width fill ]
+            (List.map (Lazy.lazy viewField) fields)
+        ]
 
 
 textField label =
@@ -591,7 +655,7 @@ searchbar =
             , onChange = always NoOp
             , placeholder = Just (Input.placeholder [ moveDown 4 ] (text "Search"))
             }
-        , el [ alignRight, Font.size 24, padding 4 ] icons.search
+        , el [ alignRight, Font.size 24, padding 4, Font.color colors.grays.light ] icons.search
         ]
 
 
@@ -614,15 +678,17 @@ sidenav isVisible =
         [ Input.button [ width fill, paddingXY 16 24 ] { label = el [ centerX ] logo, onPress = Just (NavigateTo Dashboard) }
         , el [ height (fillPortion 1) ] (text "")
         , column [ width fill ]
-            [ el [ width fill, Font.size 20, Font.bold, Font.color colors.coral, Background.color colors.lightCoral ] <|
-                el [ spacing 8, width fill, paddingXY 16 12, Font.center ] (text "Content")
-            , el [ width fill, Font.size 20, Font.bold, Font.color colors.grays.dark, Background.color colors.white ] <|
-                el [ spacing 8, width fill, paddingXY 16 12, Font.center ] (text "Media")
-            , el [ width fill, Font.size 20, Font.bold, Font.color colors.grays.dark, Background.color colors.white ] <|
-                el [ spacing 8, width fill, paddingXY 16 12, Font.center ] (text "Users")
+            [ sidenavLink True "Content"
+            , sidenavLink False "Media"
+            , sidenavLink False "Users"
             ]
         , el [ height (fillPortion 2) ] (text "")
-        , Input.button [ width fill, paddingXY 16 24 ]
+        , Input.button
+            [ width fill
+            , paddingXY 16 24
+            , mouseOver [ Font.color colors.coral ]
+            , transition FontColor 300
+            ]
             { label =
                 row [ spacing 6, centerX ]
                     [ el [] icons.signout
@@ -631,6 +697,41 @@ sidenav isVisible =
             , onPress = Just (NavigateTo SignIn)
             }
         ]
+
+
+sidenavLink : Bool -> String -> Element Msg
+sidenavLink isActive label =
+    Input.button
+        [ width fill
+        , Font.size 20
+        , Font.bold
+        , Font.color <|
+            if isActive then
+                colors.coral
+
+            else
+                colors.grays.dark
+        , Background.color <|
+            if isActive then
+                colors.lightCoral
+
+            else
+                colors.white
+        , mouseOver
+            [ Font.color colors.coral
+            ]
+        , transitions [ FontColor, BackgroundColor ] 300
+        ]
+        { label =
+            el
+                [ spacing 8
+                , width fill
+                , paddingXY 16 12
+                , Font.center
+                ]
+                (text label)
+        , onPress = Nothing
+        }
 
 
 navbar : Bool -> Element Msg
