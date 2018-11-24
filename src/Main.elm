@@ -17,6 +17,7 @@ import Process
 import Route exposing (Route)
 import Styles exposing (..)
 import Task exposing (Task)
+import Tuple
 import Url exposing (Url)
 
 
@@ -809,18 +810,8 @@ update msg model =
             )
 
         SignInMsg pageModel pageMsg ->
-            let
-                ( newPageModel, appMsg ) =
-                    SignIn.update pageMsg pageModel
-            in
-            ( { model | page = Showing (SignIn newPageModel) }
-            , case appMsg of
-                Just msg_ ->
-                    invoke (AppMsg msg_)
-
-                Nothing ->
-                    Cmd.none
-            )
+            SignIn.update pageMsg pageModel
+                |> pageTime SignIn model
 
         AppMsg appMsg ->
             case appMsg of
@@ -828,6 +819,27 @@ update msg model =
                     ( model
                     , invoke (NavigateTo route)
                     )
+
+
+pageTime :
+    (pageModel -> Page)
+    -> Model
+    -> ( pageModel, Maybe Application.Msg )
+    -> ( Model, Cmd Msg )
+pageTime toPage model =
+    Tuple.mapBoth
+        (\pageModel -> { model | page = Showing (toPage pageModel) })
+        appCommand
+
+
+appCommand : Maybe Application.Msg -> Cmd Msg
+appCommand appMsg =
+    case appMsg of
+        Just msg_ ->
+            invoke (AppMsg msg_)
+
+        Nothing ->
+            Cmd.none
 
 
 invoke : msg -> Cmd msg
