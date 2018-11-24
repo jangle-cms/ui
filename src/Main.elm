@@ -1,5 +1,6 @@
 module Main exposing (main)
 
+import Application
 import Browser exposing (Document, UrlRequest(..))
 import Browser.Events as Events
 import Browser.Navigation as Nav
@@ -11,164 +12,12 @@ import Element.Input as Input
 import Element.Lazy as Lazy
 import Html
 import Html.Attributes
+import Pages.SignIn as SignIn
 import Process
+import Route exposing (Route)
+import Styles exposing (..)
 import Task exposing (Task)
 import Url exposing (Url)
-import Url.Parser as Parser exposing ((</>), Parser, map, oneOf, s, top)
-
-
-
--- STYLES
-
-
-colors =
-    { transparent = rgba 0 0 0 0
-    , white = rgb255 255 255 255
-    , coral = rgb255 255 100 80
-    , lightCoral = rgba255 255 100 80 0.15
-    , grays =
-        { lighter = rgb255 240 240 240
-        , light = rgb255 200 200 200
-        , dark = rgb255 50 50 50
-        }
-    }
-
-
-fonts =
-    { heading =
-        Font.external
-            { url = "https://fonts.googleapis.com/css?family=Source+Sans+Pro:600"
-            , name = "Source Sans Pro"
-            }
-    , body =
-        Font.external
-            { url = "https://fonts.googleapis.com/css?family=Nunito:400,700"
-            , name = "Nunito"
-            }
-    }
-
-
-icons =
-    { menu = icon "menu"
-    , user = icon "person"
-    , search = icon "search"
-    , signout = icon "log-out"
-    , list = icon "list"
-    , users = icon "people"
-    , media = icon "images"
-    , reorder = icon "reorder"
-    }
-
-
-icon : String -> Element msg
-icon name =
-    html (Html.span [ Html.Attributes.class ("icon ion-md-" ++ name) ] [])
-
-
-setAlpha : Float -> Element.Color -> Element.Color
-setAlpha alpha =
-    toRgb >> (\color -> { color | alpha = alpha }) >> fromRgb
-
-
-shadowWithOffset offset =
-    { offset = offset
-    , size = 0
-    , blur = 8
-    , color = setAlpha 0.125 colors.grays.dark
-    }
-
-
-shadows =
-    { card = shadowWithOffset ( 0, 4 )
-    }
-
-
-classes =
-    { input =
-        [ width fill
-        , paddingXY 4 4
-        , Border.width 1
-        , spacing 8
-        , Border.color colors.grays.light
-        , Background.color colors.white
-        ]
-    , card =
-        [ width fill
-        , paddingEach { top = 36, left = 24, right = 24, bottom = 24 }
-        , spacing 48
-        , Background.color colors.white
-        , Border.rounded 6
-        , Border.solid
-        , Border.width 1
-        , Border.color colors.grays.light
-        , Border.shadow shadows.card
-        , Font.color colors.grays.dark
-        ]
-    , button =
-        [ paddingXY 24 12
-        , Border.rounded 4
-        , Border.shadow shadows.card
-        , Background.color colors.coral
-        , Font.color colors.white
-        , Font.bold
-        , Font.size 18
-        , mouseOver [ alpha 0.8 ]
-        , transition Opacity 200
-        ]
-    , tinyButton =
-        [ paddingXY 20 10
-        , Border.rounded 4
-        , Border.shadow shadows.card
-        , Background.color colors.coral
-        , Font.color colors.white
-        , Font.bold
-        , Font.size 14
-        , mouseOver [ alpha 0.8 ]
-        , transition Opacity 200
-        ]
-    }
-
-
-type TransitionableProp
-    = Transform
-    | Opacity
-    | FontColor
-    | BackgroundColor
-
-
-nameOfProp : TransitionableProp -> String
-nameOfProp prop =
-    case prop of
-        Transform ->
-            "transform"
-
-        Opacity ->
-            "opacity"
-
-        FontColor ->
-            "color"
-
-        BackgroundColor ->
-            "background-color"
-
-
-transition : TransitionableProp -> Float -> Attribute msg
-transition prop ms =
-    [ nameOfProp prop, String.fromFloat ms ++ "ms", "ease-in-out" ]
-        |> String.join " "
-        |> Html.Attributes.style "transition"
-        |> htmlAttribute
-
-
-transitions : List TransitionableProp -> Float -> Attribute msg
-transitions props ms =
-    props
-        |> List.map nameOfProp
-        |> List.map (\prop -> [ prop, String.fromFloat ms ++ "ms", "ease-in-out" ])
-        |> List.map (String.join " ")
-        |> String.join ", "
-        |> Html.Attributes.style "transition"
-        |> htmlAttribute
 
 
 
@@ -215,7 +64,7 @@ type PageStatus
 
 
 type Page
-    = SignIn
+    = SignIn SignIn.Model
     | SignUp
     | Dashboard
     | Item
@@ -229,7 +78,7 @@ init flags url key =
         (classifyDevice flags.windowSize)
         Loading
         False
-    , delay 300 (NavigateTo SignIn)
+    , delay 300 (NavigateTo Route.SignIn)
     )
 
 
@@ -258,20 +107,26 @@ view model =
              , height fill
              , Background.color colors.grays.lighter
              ]
-                ++ (if model.device.class == Phone then
-                        [ inFront (navbar (isNavVisible model.page))
-                        , inFront (footer model.device (isNavVisible model.page))
-                        ]
-
-                    else
-                        [ inFront (footer model.device (isNavVisible model.page)), inFront (sidenav (isNavVisible model.page)) ]
-                   )
+                ++ viewLayoutOverlays model
                 ++ [ clipY
                    ]
             )
             (viewLayout model)
         ]
     }
+
+
+viewLayoutOverlays : Model -> List (Attribute Msg)
+viewLayoutOverlays model =
+    if model.device.class == Phone then
+        [ inFront (navbar (isNavVisible model.page))
+        , inFront (footer model.device (isNavVisible model.page))
+        ]
+
+    else
+        [ inFront (footer model.device (isNavVisible model.page))
+        , inFront (sidenav (isNavVisible model.page))
+        ]
 
 
 isNavVisible : PageStatus -> Bool
@@ -297,7 +152,7 @@ pageFromStatus pageStatus =
 shouldShowNavigation : Page -> Bool
 shouldShowNavigation page =
     case page of
-        SignIn ->
+        SignIn _ ->
             False
 
         SignUp ->
@@ -322,20 +177,39 @@ viewLayout : Model -> Element Msg
 viewLayout model =
     case model.page of
         Loading ->
-            el [ width fill, height fill, transition Opacity 300, alpha 0 ] (text "")
+            el
+                [ width fill
+                , height fill
+                , transition Opacity 300
+                , alpha 0
+                ]
+                (text "")
 
         Leaving page ->
-            el [ width fill, height fill, transition Opacity 300, alpha 0 ] (viewPage model.device page)
+            el
+                [ width fill
+                , height fill
+                , transition Opacity 300
+                , alpha 0
+                ]
+                (viewPage model.device page)
 
         Showing page ->
-            el [ width fill, height fill, transition Opacity 300, alpha 1 ] (viewPage model.device page)
+            el
+                [ width fill
+                , height fill
+                , transition Opacity 300
+                , alpha 1
+                ]
+                (viewPage model.device page)
 
 
 viewPage : Device -> Page -> Element Msg
 viewPage device page =
     case page of
-        SignIn ->
-            signInPage
+        SignIn model ->
+            SignIn.view model
+                |> Element.map (SignInMsg model)
 
         SignUp ->
             text "Sign up"
@@ -376,50 +250,6 @@ pageWithNavigation device =
             ]
 
 
-signInPage : Element Msg
-signInPage =
-    el
-        [ padding 16
-        , centerX
-        , centerY
-        , width (fill |> maximum 320)
-        ]
-        signInForm
-
-
-signInForm : Element Msg
-signInForm =
-    column classes.card
-        [ el
-            [ Font.size 56
-            , Font.family [ fonts.heading ]
-            , centerX
-            ]
-            (text "Jangle")
-        , column [ spacing 24, width fill ]
-            [ Input.email
-                classes.input
-                { onChange = always NoOp
-                , text = ""
-                , placeholder = Nothing
-                , label = Input.labelAbove [ Font.bold ] (text "Email")
-                }
-            , Input.currentPassword
-                classes.input
-                { onChange = always NoOp
-                , text = ""
-                , placeholder = Nothing
-                , show = False
-                , label = Input.labelAbove [ Font.bold ] (text "Password")
-                }
-            , Input.button (classes.button ++ [ alignRight ])
-                { onPress = Just (NavigateTo Dashboard)
-                , label = text "Sign in"
-                }
-            ]
-        ]
-
-
 dashboardPage : Element Msg
 dashboardPage =
     column
@@ -439,7 +269,7 @@ dashboardPage =
                 , height fill
                 , spacing 12
                 ]
-                (List.map cardExample
+                (List.map listCard
                     [ ( "People", "10 people" )
                     , ( "Blog Posts", "52 posts" )
                     , ( "Offices", "4 locations" )
@@ -548,39 +378,42 @@ viewField ( label, field ) =
                 [ el [ Font.size 28, Font.bold ] (text label)
                 , column [ spacing 16, width fill ]
                     (List.map
-                        (\field_ ->
-                            el
-                                [ width fill
-                                , spacing 12
-                                , onLeft
-                                    (el
-                                        [ height fill
-                                        , paddingEach { top = 0, left = 0, right = 8, bottom = 0 }
-                                        ]
-                                        (Input.button
-                                            [ Font.size 24
-                                            , Font.color colors.grays.light
-                                            , mouseOver
-                                                [ Background.color colors.lightCoral
-                                                , Font.color colors.coral
-                                                ]
-                                            , transitions [ FontColor, BackgroundColor ] 300
-                                            , height fill
-                                            , paddingXY 8 0
-                                            ]
-                                            { label = el [ centerY ] icons.reorder
-                                            , onPress = Nothing
-                                            }
-                                        )
-                                    )
-                                ]
-                                (Lazy.lazy viewField field_)
-                        )
+                        viewRepeatedField
                         fields
                     )
                 , Input.button (classes.tinyButton ++ [ alignRight ])
                     { label = text "Add row", onPress = Nothing }
                 ]
+
+
+viewRepeatedField : ( String, Field ) -> Element Msg
+viewRepeatedField pair =
+    el
+        [ width fill
+        , spacing 12
+        , onLeft
+            (el
+                [ height fill
+                , paddingEach { top = 0, left = 0, right = 8, bottom = 0 }
+                ]
+                (Input.button
+                    [ Font.size 24
+                    , Font.color colors.grays.light
+                    , mouseOver
+                        [ Background.color colors.lightCoral
+                        , Font.color colors.coral
+                        ]
+                    , transitions [ FontColor, BackgroundColor ] 300
+                    , height fill
+                    , paddingXY 8 0
+                    ]
+                    { label = el [ centerY ] icons.reorder
+                    , onPress = Nothing
+                    }
+                )
+            )
+        ]
+        (Lazy.lazy viewField pair)
 
 
 viewGroupFields : String -> Form -> Element Msg
@@ -653,9 +486,16 @@ searchbar =
             { label = Input.labelHidden "Search"
             , text = ""
             , onChange = always NoOp
-            , placeholder = Just (Input.placeholder [ moveDown 4 ] (text "Search"))
+            , placeholder =
+                Just (Input.placeholder [ moveDown 4 ] (text "Search"))
             }
-        , el [ alignRight, Font.size 24, padding 4, Font.color colors.grays.light ] icons.search
+        , el
+            [ alignRight
+            , Font.size 24
+            , padding 4
+            , Font.color colors.grays.light
+            ]
+            icons.search
         ]
 
 
@@ -675,7 +515,11 @@ sidenav isVisible =
             )
         , transition Transform 300
         ]
-        [ Input.button [ width fill, paddingXY 16 24 ] { label = el [ centerX ] logo, onPress = Just (NavigateTo Dashboard) }
+        [ Input.button
+            [ width fill, paddingXY 16 24 ]
+            { label = el [ centerX ] logo
+            , onPress = Just (NavigateTo Route.Dashboard)
+            }
         , el [ height (fillPortion 1) ] (text "")
         , column [ width fill ]
             [ sidenavLink True "Content"
@@ -694,7 +538,7 @@ sidenav isVisible =
                     [ el [] icons.signout
                     , text "Sign out"
                     ]
-            , onPress = Just (NavigateTo SignIn)
+            , onPress = Just (NavigateTo Route.SignIn)
             }
         ]
 
@@ -757,9 +601,15 @@ navbar isVisible =
             , width (fill |> maximum 720)
             , centerX
             ]
-            [ Input.button [ Font.size 24, alignLeft ] { label = icons.menu, onPress = Just RevealSidenav }
-            , Input.button [ centerX ] { label = logo, onPress = Just (NavigateTo Dashboard) }
-            , Input.button [ Font.size 24, alignRight ] { label = icons.signout, onPress = Just (NavigateTo SignIn) }
+            [ Input.button
+                [ Font.size 24, alignLeft ]
+                { label = icons.menu, onPress = Just RevealSidenav }
+            , Input.button
+                [ centerX ]
+                { label = logo, onPress = Just (NavigateTo Route.Dashboard) }
+            , Input.button
+                [ Font.size 24, alignRight ]
+                { label = icons.signout, onPress = Just (NavigateTo Route.SignIn) }
             ]
 
 
@@ -807,20 +657,20 @@ footer device isVisible =
             , width (fill |> maximum 720)
             , centerX
             ]
-            [ button Item "Create"
+            [ button (Route.NewItem "people") "Create"
             ]
 
 
-button : Page -> String -> Element Msg
-button page label =
+button : Route -> String -> Element Msg
+button route label =
     Input.button (classes.button ++ [ centerX, moveUp 20 ])
-        { onPress = Just (NavigateTo page)
+        { onPress = Just (NavigateTo route)
         , label = text label
         }
 
 
-cardExample : ( String, String ) -> Element Msg
-cardExample ( label, caption ) =
+listCard : ( String, String ) -> Element Msg
+listCard ( label, caption ) =
     column
         [ width fill
         , padding 16
@@ -836,7 +686,40 @@ cardExample ( label, caption ) =
             , Font.bold
             ]
             (text label)
-        , el [ Font.size 14, alpha 0.5 ] (text caption)
+        , el
+            [ Font.size 14
+            , alpha 0.5
+            ]
+            (text caption)
+        ]
+
+
+itemCard : ( String, String ) -> Element Msg
+itemCard ( label, caption ) =
+    column
+        [ width fill
+        , padding 16
+        , spacing 4
+        , Background.color colors.white
+        , Border.solid
+        , Border.color colors.grays.light
+        , Border.shadow shadows.card
+        , Font.color colors.grays.dark
+        ]
+        [ el
+            [ Font.size 24
+            , Font.bold
+            ]
+            (text label)
+        , el
+            [ Font.size 14
+            , alpha 0.5
+            , Background.color colors.coral
+            , Font.color colors.white
+            , Border.rounded 12
+            , paddingXY 10 4
+            ]
+            (text caption)
         ]
 
 
@@ -847,13 +730,15 @@ cardExample ( label, caption ) =
 type Msg
     = OnUrlRequest UrlRequest
     | OnUrlChange Url
-    | NavigateTo Page
+    | NavigateTo Route.Route
     | FadeIn Page
     | ShowPage Page
     | WindowResize Int Int
     | RevealSidenav
     | HideSidenav
     | NoOp
+    | SignInMsg SignIn.Model SignIn.Msg
+    | AppMsg Application.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -875,17 +760,21 @@ update msg model =
             )
 
         WindowResize width height ->
-            ( { model | device = classifyDevice { width = width, height = height } }
+            ( { model
+                | device =
+                    classifyDevice
+                        { width = width, height = height }
+              }
             , Cmd.none
             )
 
         NavigateTo page ->
             ( model
-            , if urlOf page model.url /= model.url then
-                Nav.pushUrl model.key (Url.toString (urlOf page model.url))
+            , if Route.urlOf page model.url /= model.url then
+                Nav.pushUrl model.key (Url.toString (Route.urlOf page model.url))
 
               else
-                Nav.replaceUrl model.key (Url.toString (urlOf page model.url))
+                Nav.replaceUrl model.key (Url.toString (Route.urlOf page model.url))
             )
 
         OnUrlRequest request ->
@@ -901,8 +790,12 @@ update msg model =
                     )
 
         OnUrlChange url ->
+            let
+                route =
+                    Route.pageFrom url
+            in
             ( { model | url = url }
-            , call (FadeIn (pageFrom url))
+            , call (FadeIn (initPage route))
             )
 
         FadeIn page ->
@@ -914,6 +807,48 @@ update msg model =
             ( { model | page = Showing page }
             , Cmd.none
             )
+
+        SignInMsg pageModel pageMsg ->
+            let
+                ( newPageModel, appMsg ) =
+                    SignIn.update pageMsg pageModel
+            in
+            ( { model | page = Showing (SignIn newPageModel) }
+            , case appMsg of
+                Just msg_ ->
+                    invoke (AppMsg msg_)
+
+                Nothing ->
+                    Cmd.none
+            )
+
+        AppMsg appMsg ->
+            case appMsg of
+                Application.NavigateTo route ->
+                    ( model
+                    , invoke (NavigateTo route)
+                    )
+
+
+invoke : msg -> Cmd msg
+invoke msg =
+    Task.perform (always msg) (Task.succeed msg)
+
+
+initPage : Route -> Page
+initPage route =
+    case route of
+        Route.SignIn ->
+            SignIn SignIn.init
+
+        Route.Dashboard ->
+            Dashboard
+
+        Route.NewItem slug ->
+            Item
+
+        Route.NotFound ->
+            NotFound
 
 
 fadeOut : PageStatus -> PageStatus
@@ -927,52 +862,6 @@ fadeOut pageStatus =
 
         Showing page ->
             Leaving page
-
-
-urlOf : Page -> Url -> Url
-urlOf page url =
-    { url | path = pathOf page }
-
-
-pathOf : Page -> String
-pathOf page =
-    "/"
-        ++ (case page of
-                Dashboard ->
-                    ""
-
-                Item ->
-                    "lists/people/new"
-
-                SignIn ->
-                    "sign-in"
-
-                SignUp ->
-                    "sign-up"
-
-                NotFound ->
-                    "not-found"
-           )
-
-
-pageFrom : Url -> Page
-pageFrom url =
-    case Parser.parse route url of
-        Just page ->
-            page
-
-        Nothing ->
-            NotFound
-
-
-route : Parser (Page -> a) a
-route =
-    oneOf
-        [ map Dashboard top
-        , map SignIn (s "sign-in")
-        , map SignUp (s "sign-up")
-        , map Item (s "lists" </> s "people" </> s "new")
-        ]
 
 
 
